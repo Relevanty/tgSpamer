@@ -74,3 +74,49 @@ npm run schedule:acc1   # .env.acc1
 - Между сообщениями: 3000 мс.
 - Между пользователями: 60000 мс.
 - После каждых 20 попыток — пауза 30 мин.
+
+## Запуск в Docker
+
+1. Создайте рабочий `.env` рядом с [`docker-compose.yml`](docker-compose.yml) на основе [`example.env.acc1`](example.env.acc1).
+2. Для первого интерактивного входа выполните:
+
+```bash
+docker compose run --rm telegram-sender
+```
+
+3. После сохранения `SESSION_STRING` в [`.env`](.env) можно запускать в фоне:
+
+```bash
+docker compose up -d telegram-sender
+```
+
+4. Для режима ежедневного расписания:
+
+```bash
+docker compose --profile scheduler up -d telegram-scheduler
+```
+
+### Что монтируется
+
+- [`./lists`](lists/) → `/app/lists`
+- [`./messages`](messages/) → `/app/messages`
+- [`./storage`](storage/) → `/app/storage`
+- [`./report.csv`](report.csv) → `/app/report.csv`
+- [`.env`](.env) → `/app/.env`
+
+### Полезные команды
+
+```bash
+docker compose build
+docker compose up telegram-sender
+docker compose logs -f telegram-sender
+docker compose run --rm telegram-sender npm run archive
+docker compose --profile scheduler up -d telegram-scheduler
+```
+
+### Замечания по деплою
+
+- [`Dockerfile`](Dockerfile) использует базовый образ `node:20-bookworm-slim`.
+- [`docker-compose.yml`](docker-compose.yml) включает `stdin_open: true` и `tty: true`, чтобы работали QR-логин и интерактивные prompts.
+- Для полностью неинтерактивного деплоя заранее сохраните `SESSION_STRING` и укажите `LIST_FILE`/`MESSAGE_FILES` в [`.env`](.env).
+- Если `report.csv` отсутствует, создайте пустой файл перед запуском: `touch report.csv`.
