@@ -1,0 +1,36 @@
+services:
+  telegram-sender:
+    build:
+      context: .
+    container_name: telegram-sender
+    restart: unless-stopped
+    stdin_open: true
+    tty: true
+    env_file:
+      - .env
+    volumes:
+      - ./lists:/app/lists
+      - ./messages:/app/messages
+      - ./storage:/app/storage
+      - ./report.csv:/app/report.csv
+      - ./.env:/app/.env
+    command: npm start
+
+  telegram-scheduler:
+    build:
+      context: .
+    container_name: telegram-scheduler
+    restart: unless-stopped
+    stdin_open: true
+    tty: true
+    env_file:
+      - .env
+    volumes:
+      - ./lists:/app/lists
+      - ./messages:/app/messages
+      - ./storage:/app/storage
+      - ./report.csv:/app/report.csv
+      - ./.env:/app/.env
+    command: npm run schedule
+    profiles:
+      - scheduler
