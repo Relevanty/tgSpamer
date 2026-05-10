@@ -7,13 +7,12 @@ git clone <repo>
 cd relevantySpamer
 npm install
 cp .env.example .env
-# вписать API_ID / API_HASH
 npm start
 ```
 
 ## Настройка `.env`
 
-- `API_ID` / `API_HASH` — берём на https://my.telegram.org/auth?to=apps (открывается автоматически, если пусто).
+- `API_ID` / `API_HASH` — заполнять не нужно; если указаны оба корректно, скрипт использует их вместо встроенных.
 - `AUTH_METHOD=qr` (по умолчанию) или `phone`.
 - `SESSION_STRING` — можно оставить пустым; после авторизации сохранится автоматически.
 - Прокси (если нужен): `SOCKS_PROXY=127.0.0.1:1080`, `SOCKS_TYPE=5`, `TELEGRAM_TRANSPORT=obfuscated`. Если прокси пустой — работает без него.

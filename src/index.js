@@ -1,5 +1,4 @@
 ﻿import "dotenv/config";
-import { spawn } from "node:child_process";
 import fs from "node:fs/promises";
 import path from "node:path";
 import input from "input";
@@ -31,7 +30,9 @@ import { appendReportRow } from "./report.js";
 import { loadProcessedUsers, saveProcessedUsers } from "./storage.js";
 import { normalizeUsername, sleep, usernameKey } from "./utils.js";
 
-const TELEGRAM_APPS_URL = "https://my.telegram.org/auth?to=apps";
+// GramJS still needs non-empty app credentials for every auth method.
+const DEFAULT_API_ID = 2040;
+const DEFAULT_API_HASH = "b18441a1ff607e10a989891a5462e627";
 const TODAY_KEY = new Date().toISOString().slice(0, 10);
 const CONNECTION_TYPES = {
   full: ConnectionTCPFull,
@@ -278,34 +279,6 @@ async function registerConnectionDiagnostics(client, connectionOptions, diagnost
     },
     new Raw({ types: [UpdateConnectionState] }),
   );
-}
-
-function openTelegramAppsPage() {
-  try {
-    if (process.platform === "win32") {
-      spawn("cmd", ["/c", "start", "", TELEGRAM_APPS_URL], {
-        detached: true,
-        stdio: "ignore",
-      }).unref();
-      return;
-    }
-
-    if (process.platform === "darwin") {
-      spawn("open", [TELEGRAM_APPS_URL], {
-        detached: true,
-        stdio: "ignore",
-      }).unref();
-      return;
-    }
-
-    spawn("xdg-open", [TELEGRAM_APPS_URL], {
-      detached: true,
-      stdio: "ignore",
-    }).unref();
-  } catch (error) {
-    console.warn(`Не удалось автоматически открыть браузер: ${getErrorMessage(error)}`);
-    console.log(`Откройте ссылку вручную: ${TELEGRAM_APPS_URL}`);
-  }
 }
 
 function escapeEnvValue(value) {
@@ -636,22 +609,16 @@ async function appendLog(user, status) {
 }
 
 function validateEnv() {
-  const apiId = Number(process.env.API_ID);
-  const apiHash = process.env.API_HASH;
+  const envApiId = Number(String(process.env.API_ID ?? "").trim());
+  const envApiHash = String(process.env.API_HASH ?? "").trim();
+  const hasEnvApiCredentials =
+    Number.isInteger(envApiId) && envApiId > 0 && envApiHash.length > 0;
+  const apiId = hasEnvApiCredentials ? envApiId : DEFAULT_API_ID;
+  const apiHash = hasEnvApiCredentials ? envApiHash : DEFAULT_API_HASH;
   const forceSms = String(process.env.FORCE_SMS ?? "false").toLowerCase() === "true";
   const authMethodRaw = String(process.env.AUTH_METHOD ?? "qr").trim().toLowerCase();
   const authMethod = authMethodRaw === "phone" ? "phone" : "qr";
   const connectionOptions = buildConnectionOptions();
-  const isApiIdMissing = !process.env.API_ID || Number.isNaN(apiId) || apiId <= 0;
-  const isApiHashMissing = !apiHash;
-
-  if (isApiIdMissing || isApiHashMissing) {
-    openTelegramAppsPage();
-    throw new Error(
-      "В .env не заполнены API_ID/API_HASH. Открыл браузер: https://my.telegram.org/auth?to=apps. " +
-      "Создайте Telegram App credentials и вставьте их в .env.",
-    );
-  }
 
   return { apiId, apiHash, forceSms, authMethod, connectionOptions };
 }
