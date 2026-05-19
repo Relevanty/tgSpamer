@@ -1,0 +1,32 @@
+@echo off
+setlocal
+chcp 65001 >nul
+cd /d "%~dp0"
+
+if not exist ".env.acc1" (
+  if exist "example.env.acc1" (
+    copy "example.env.acc1" ".env.acc1" >nul
+    echo Создан .env.acc1 из example.env.acc1.
+    echo.
+  ) else (
+    echo Не найден example.env.acc1. Невозможно создать .env.acc1.
+    echo.
+    pause
+    exit /b 1
+  )
+)
+
+set "AUTH_METHOD=qr"
+set "PROBE_MODE=true"
+set "PROBE_IDLE_MS=1000"
+
+echo Вход acc1.
+echo После сканирования QR SESSION_STRING сохранится в .env.acc1.
+echo.
+
+call npm run start:acc1
+set "EXIT_CODE=%ERRORLEVEL%"
+
+echo.
+pause
+exit /b %EXIT_CODE%

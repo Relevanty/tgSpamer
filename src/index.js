@@ -44,6 +44,19 @@ function nowStamp() {
   return new Date().toISOString().replace("T", " ").slice(0, 19);
 }
 
+function getActiveEnvPath() {
+  const configuredPath = String(process.env.DOTENV_CONFIG_PATH ?? "").trim();
+  return configuredPath ? path.resolve(configuredPath) : path.resolve(".env");
+}
+
+function formatEnvPath(filePath) {
+  const relativePath = path.relative(process.cwd(), filePath);
+  if (relativePath && !relativePath.startsWith("..") && !path.isAbsolute(relativePath)) {
+    return relativePath;
+  }
+  return filePath;
+}
+
 function buildOutboundMessages(fileMessages) {
   const messagePool = [];
 
@@ -85,17 +98,47 @@ function selectConfiguredTextFiles(fileMessages) {
 
 function findResumeIndexFromProcessed(usersFromLists, processedUsers) {
   for (let index = 0; index < usersFromLists.length; index += 1) {
-    const user = normalizeUsername(usersFromLists[index].raw);
-    if (!user) {
+    const recipient = parseRecipientEntry(usersFromLists[index].raw);
+    if (!recipient) {
       continue;
     }
 
-    if (!processedUsers.has(usernameKey(user))) {
+    if (!processedUsers.has(recipient.key)) {
       return index;
     }
   }
 
   return usersFromLists.length;
+}
+
+function parseRecipientEntry(raw) {
+  const value = String(raw ?? "").trim();
+  if (!value) {
+    return null;
+  }
+
+  const idHashMatch = value.match(/^(\d+):(-?\d+)$/);
+  if (idHashMatch) {
+    return {
+      peer: new Api.InputPeerUser({
+        userId: BigInt(idHashMatch[1]),
+        accessHash: BigInt(idHashMatch[2]),
+      }),
+      label: `id:${idHashMatch[1]}`,
+      key: value.toLowerCase(),
+    };
+  }
+
+  const username = normalizeUsername(value);
+  if (!username) {
+    return null;
+  }
+
+  return {
+    peer: username,
+    label: username,
+    key: usernameKey(username),
+  };
 }
 
 function getErrorMessage(error) {
@@ -706,7 +749,8 @@ async function startClientWithQrAuth(client, apiId, apiHash) {
 async function startClient(apiId, apiHash, forceSms, authMethod, connectionOptions) {
   const sessionString = process.env.SESSION_STRING ?? "";
   const stringSession = new StringSession(sessionString);
-  const envPath = path.resolve(".env");
+  const envPath = getActiveEnvPath();
+  const envLabel = formatEnvPath(envPath);
   const diagnosticLog = createDiagnosticLogger(
     connectionOptions.debugConnection || connectionOptions.probeMode,
     PATHS.CONNECTION_DEBUG_LOG,
@@ -754,11 +798,11 @@ async function startClient(apiId, apiHash, forceSms, authMethod, connectionOptio
   const shouldSyncSession = !sessionString || savedSessionString !== sessionString;
   if (shouldSyncSession) {
     await upsertEnvValue(envPath, "SESSION_STRING", savedSessionString);
-    console.log("SESSION_STRING сохранен в .env");
+    console.log(`SESSION_STRING сохранен в ${envLabel}`);
   }
 
   if (!sessionString) {
-    console.log("SESSION_STRING для .env:");
+    console.log(`SESSION_STRING для ${envLabel}:`);
     console.log(savedSessionString);
   }
 
@@ -990,7 +1034,7 @@ async function persistStickerSelection(client, document, stickerSets, envPath) {
   await upsertEnvValue(envPath, "STICKER_SET_INDEX", setIndex);
   await upsertEnvValue(envPath, "STICKER_DOC_INDEX", docIndex);
   console.log(
-    `Стикер выбран и сохранен в .env (STICKER_SET_INDEX=${setIndex}, STICKER_DOC_INDEX=${docIndex}).`,
+    `Стикер выбран и сохранен в ${formatEnvPath(envPath)} (STICKER_SET_INDEX=${setIndex}, STICKER_DOC_INDEX=${docIndex}).`,
   );
 }
 
@@ -1139,7 +1183,7 @@ async function main() {
   let stickerDocument = null;
   if (STICKER_CONFIG.ENABLED) {
     try {
-      const envPath = path.resolve(".env");
+      const envPath = getActiveEnvPath();
       stickerDocument = await loadStickerDocument(client, envPath);
       if (stickerDocument) {
         console.log("Стикер загружен.");
@@ -1159,13 +1203,14 @@ async function main() {
     for (let rowIndex = startIndex; rowIndex < usersFromLists.length; rowIndex += 1) {
       const row = usersFromLists[rowIndex];
       const nextIndex = rowIndex + 1;
-      const user = normalizeUsername(row.raw);
-      if (!user) {
+      const recipient = parseRecipientEntry(row.raw);
+      if (!recipient) {
         await saveProgressState(PATHS.PROGRESS_STATE_JSON, nextIndex, usersFromLists.length);
         continue;
       }
 
-      const dedupeKey = usernameKey(user);
+      const user = recipient.label;
+      const dedupeKey = recipient.key;
       if (usersSeenThisRun.has(dedupeKey) || processedUsers.has(dedupeKey)) {
         console.log(`ПРОПУСК дубликата пользователя: ${user}`);
         await appendLog(user, "Skipped: duplicate username");
@@ -1180,7 +1225,7 @@ async function main() {
       try {
         console.log(`[${attemptCounter}] Отправка для ${user}`);
         const outboundMessages = buildOutboundMessages(fileMessages);
-        await sendMessagesToUser(client, user, outboundMessages, stickerDocument);
+        await sendMessagesToUser(client, recipient.peer, outboundMessages, stickerDocument);
 
         processedUsers.add(dedupeKey);
         await saveProcessedUsers(PATHS.PROCESSED_USERS_JSON, processedUsers);

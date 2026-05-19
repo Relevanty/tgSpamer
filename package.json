@@ -12,11 +12,15 @@
     "archive:acc1": "node tools/start.js .env.acc1 --archive",
     "archive:acc2": "node tools/start.js .env.acc2 --archive",
     "archive:acc3": "node tools/start.js .env.acc3 --archive",
+    "parse": "node tools/parse.js",
+    "parse:acc1": "node tools/parse.js .env.acc1",
+    "parse:acc2": "node tools/parse.js .env.acc2",
+    "parse:acc3": "node tools/parse.js .env.acc3",
     "schedule": "node tools/schedule.js",
     "schedule:acc1": "node tools/schedule.js .env.acc1",
     "schedule:acc2": "node tools/schedule.js .env.acc2",
     "schedule:acc3": "node tools/schedule.js .env.acc3",
-    "check": "node --check src/index.js",
+    "check": "node --check src/index.js && node --check src/parser.js && node --check tools/parse.js",
     "update": "node tools/update.js"
   },
   "dependencies": {
