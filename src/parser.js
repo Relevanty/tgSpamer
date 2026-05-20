@@ -18,6 +18,8 @@ const CONNECTION_TYPES = {
   abridged: ConnectionTCPAbridged,
   obfuscated: ConnectionTCPObfuscated,
 };
+const NAV_BACK = "__parser_back__";
+const NAV_EXIT = "__parser_exit__";
 
 function getErrorMessage(error) {
   if (typeof error?.errorMessage === "string" && error.errorMessage.trim()) {
@@ -27,6 +29,11 @@ function getErrorMessage(error) {
     return error.message.trim();
   }
   return String(error);
+}
+
+function isBackInput(value) {
+  const normalized = String(value ?? "").trim().toLowerCase();
+  return normalized === "/back" || normalized === "back" || normalized === "назад";
 }
 
 function parseBooleanEnv(name, defaultValue = false) {
@@ -366,13 +373,8 @@ async function listPublicDialogs(client) {
   return dialogs.sort((a, b) => a.name.localeCompare(b.name, "ru", { sensitivity: "base" }));
 }
 
-async function promptManualTarget(client) {
-  const targetEntity = await input.text("Введите username, ссылку или ID группы/канала для парсинга: ");
-  const trimmedTarget = String(targetEntity ?? "").trim();
-  if (!trimmedTarget) {
-    throw new Error("Группа или канал не указаны.");
-  }
-
+async function resolveTargetEntity(client, target) {
+  const trimmedTarget = String(target ?? "").trim();
   console.log(`Получаем информацию о ${trimmedTarget}...`);
   try {
     return await client.getEntity(trimmedTarget);
@@ -381,39 +383,74 @@ async function promptManualTarget(client) {
   }
 }
 
-async function promptTargetEntity(client) {
-  const cliTarget = process.argv.slice(2).find((arg) => String(arg).trim());
-  if (cliTarget) {
-    console.log(`Получаем информацию о ${cliTarget}...`);
+async function promptManualTarget(client) {
+  while (true) {
+    const targetEntity = await input.text(
+      "Введите username, ссылку или ID группы/канала для парсинга (/back - назад): ",
+    );
+    const trimmedTarget = String(targetEntity ?? "").trim();
+    if (!trimmedTarget || isBackInput(trimmedTarget)) {
+      return NAV_BACK;
+    }
+
     try {
-      return await client.getEntity(cliTarget);
+      return await resolveTargetEntity(client, trimmedTarget);
     } catch (error) {
-      throw new Error(`Ошибка при получении группы/канала: ${getErrorMessage(error)}`);
+      console.error(getErrorMessage(error));
+      console.log("Возвращаюсь к выбору источника.");
+      return NAV_BACK;
     }
   }
+}
 
-  const source = await input.select("Откуда взять группу/канал для парсинга?", [
-    { name: "Выбрать из публичных групп/каналов аккаунта", value: "account" },
-    { name: "Ввести ссылку / username / ID вручную", value: "manual" },
-  ]);
+async function promptTargetEntity(client) {
+  while (true) {
+    const source = await input.select("Откуда взять группу/канал для парсинга?", [
+      { name: "Выбрать из публичных групп/каналов аккаунта", value: "account" },
+      { name: "Ввести ссылку / username / ID вручную", value: "manual" },
+      { name: "Завершить", value: NAV_EXIT },
+    ]);
 
-  if (source === "manual") {
-    return promptManualTarget(client);
+    if (source === NAV_EXIT) {
+      return NAV_EXIT;
+    }
+
+    if (source === "manual") {
+      const entity = await promptManualTarget(client);
+      if (entity === NAV_BACK) {
+        continue;
+      }
+      return entity;
+    }
+
+    console.log("Загружаю публичные группы и каналы аккаунта...");
+    let dialogs = [];
+    try {
+      dialogs = await listPublicDialogs(client);
+    } catch (error) {
+      console.error(`Ошибка при загрузке списка групп/каналов: ${getErrorMessage(error)}`);
+      continue;
+    }
+
+    if (dialogs.length === 0) {
+      console.log("Публичные группы/каналы в аккаунте не найдены. Можно ввести ссылку вручную.");
+      const entity = await promptManualTarget(client);
+      if (entity === NAV_BACK) {
+        continue;
+      }
+      return entity;
+    }
+
+    const selectedEntity = await input.select("Выберите группу/канал:", [
+      ...dialogs,
+      { name: "Назад", value: NAV_BACK },
+    ]);
+
+    if (selectedEntity === NAV_BACK) {
+      continue;
+    }
+    return selectedEntity;
   }
-
-  console.log("Загружаю публичные группы и каналы аккаунта...");
-  const dialogs = await listPublicDialogs(client);
-  if (dialogs.length === 0) {
-    console.log("Публичные группы/каналы в аккаунте не найдены. Перехожу к вводу ссылки.");
-    return promptManualTarget(client);
-  }
-
-  if (dialogs.length === 1) {
-    console.log(`Найден один вариант: ${dialogs[0].name}`);
-    return dialogs[0].value;
-  }
-
-  return input.select("Выберите группу/канал:", dialogs);
 }
 
 async function collectAllParticipants(client, entity, participants) {
@@ -557,6 +594,43 @@ async function saveParticipants(entity, participants) {
   console.log(`Сохранено в ${outPath}`);
 }
 
+async function promptParseMethod() {
+  return input.select("Выберите метод сбора участников:", [
+    { name: "Собрать всех участников", value: "all" },
+    { name: "Собрать активных из истории сообщений", value: "active" },
+    { name: "Собрать комментаторов из постов канала", value: "comments" },
+    { name: "Назад", value: NAV_BACK },
+  ]);
+}
+
+async function runParseScenario(client, entity) {
+  console.log(`Цель: ${entity.title || entity.username || entity.id}`);
+
+  const parseMethod = await promptParseMethod();
+  if (parseMethod === NAV_BACK) {
+    return { completed: false, back: true };
+  }
+
+  const participants = new Set();
+
+  if (parseMethod === "all") {
+    await collectAllParticipants(client, entity, participants);
+  } else if (parseMethod === "active") {
+    await collectActiveUsers(client, entity, participants);
+  } else if (parseMethod === "comments") {
+    await collectCommenters(client, entity, participants);
+  }
+
+  if (participants.size === 0) {
+    console.log("Участники не найдены. Можно выбрать другую группу/канал или другой метод.");
+    return { completed: false, back: true };
+  }
+
+  console.log(`Собрано ${participants.size} уникальных пользователей.`);
+  await saveParticipants(entity, participants);
+  return { completed: true, back: false };
+}
+
 export async function runParser() {
   const { apiId, apiHash, forceSms, authMethod } = validateEnv();
   const client = await startClient(apiId, apiHash, forceSms, authMethod);
@@ -565,32 +639,35 @@ export async function runParser() {
     const me = await client.getMe();
     console.log(`Вход выполнен как ${me.username || me.firstName || me.id}`);
 
-    const entity = await promptTargetEntity(client);
-    console.log(`Цель: ${entity.title || entity.username || entity.id}`);
-
-    const parseMethod = await input.select("Выберите метод сбора участников:", [
-      { name: "Собрать всех участников", value: "all" },
-      { name: "Собрать активных из истории сообщений", value: "active" },
-      { name: "Собрать комментаторов из постов канала", value: "comments" },
-    ]);
-
-    const participants = new Set();
-
-    if (parseMethod === "all") {
-      await collectAllParticipants(client, entity, participants);
-    } else if (parseMethod === "active") {
-      await collectActiveUsers(client, entity, participants);
-    } else if (parseMethod === "comments") {
-      await collectCommenters(client, entity, participants);
+    const cliTarget = process.argv.slice(2).find((arg) => String(arg).trim());
+    let initialEntity = null;
+    if (cliTarget) {
+      try {
+        initialEntity = await resolveTargetEntity(client, cliTarget);
+      } catch (error) {
+        console.error(getErrorMessage(error));
+        console.log("Перехожу к интерактивному выбору цели.");
+      }
     }
 
-    if (participants.size === 0) {
-      console.log("Участники не найдены.");
-      return;
-    }
+    while (true) {
+      const entity = initialEntity ?? (await promptTargetEntity(client));
+      initialEntity = null;
 
-    console.log(`Собрано ${participants.size} уникальных пользователей.`);
-    await saveParticipants(entity, participants);
+      if (entity === NAV_EXIT) {
+        break;
+      }
+
+      try {
+        const result = await runParseScenario(client, entity);
+        if (result.completed) {
+          break;
+        }
+      } catch (error) {
+        console.error(`Ошибка: ${getErrorMessage(error)}`);
+        console.log("Возвращаюсь к выбору группы/канала.");
+      }
+    }
   } finally {
     await client.disconnect();
   }

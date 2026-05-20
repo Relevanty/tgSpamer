@@ -11,7 +11,8 @@ if not exist ".env.acc1" (
   ) else (
     echo Не найден example.env.acc1. Невозможно создать .env.acc1.
     echo.
-    pause
+    echo Нажмите любую кнопку, чтобы выйти.
+    pause >nul
     exit /b 1
   )
 )
@@ -28,5 +29,6 @@ call npm run start:acc1
 set "EXIT_CODE=%ERRORLEVEL%"
 
 echo.
-pause
+echo Нажмите любую кнопку, чтобы выйти.
+pause >nul
 exit /b %EXIT_CODE%

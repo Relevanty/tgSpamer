@@ -10,7 +10,8 @@ if errorlevel 1 (
   start "" "https://nodejs.org/"
   echo Установите Node.js LTS, затем запустите установка.bat снова.
   echo.
-  pause
+  echo Нажмите любую кнопку, чтобы выйти.
+  pause >nul
   exit /b 1
 )
 
@@ -19,7 +20,8 @@ if errorlevel 1 (
   echo npm не найден. Переустановите Node.js с официального сайта.
   start "" "https://nodejs.org/"
   echo.
-  pause
+  echo Нажмите любую кнопку, чтобы выйти.
+  pause >nul
   exit /b 1
 )
 
@@ -33,12 +35,14 @@ if not "%EXIT_CODE%"=="0" (
   echo.
   echo Ошибка при установке зависимостей.
   echo.
-  pause
+  echo Нажмите любую кнопку, чтобы выйти.
+  pause >nul
   exit /b %EXIT_CODE%
 )
 
 echo.
 echo Зависимости установлены.
 echo.
-pause
+echo Нажмите любую кнопку, чтобы выйти.
+pause >nul
 exit /b 0

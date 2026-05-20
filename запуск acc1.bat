@@ -10,5 +10,6 @@ call npm run start:acc1
 set "EXIT_CODE=%ERRORLEVEL%"
 
 echo.
-pause
+echo Нажмите любую кнопку, чтобы выйти.
+pause >nul
 exit /b %EXIT_CODE%
