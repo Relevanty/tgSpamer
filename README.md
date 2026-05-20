@@ -1,121 +1,135 @@
-# Node.js Telegram Sender (gramjs)
+# Telegram Sender / Parser
 
-## Быстрый старт
+Проект для входа в Telegram-аккаунт, рассылки по списку, архивации диалогов и сбора участников из групп/каналов.
 
-```bash
-git clone <repo>
-cd relevantySpamer
+## Обычный запуск через батники
+
+Используйте этот вариант, если не хотите запускать команды вручную. Просто открывайте нужные `.bat` файлы двойным кликом и следуйте подсказкам в окне.
+
+### Первый запуск
+
+1. Откройте `установка.bat`.
+2. Откройте `войти acc1.bat`.
+3. Отсканируйте QR-код через Telegram.
+4. Когда вход завершится, окно можно закрыть.
+
+### Рассылка
+
+Откройте:
+
+```text
+запуск acc1.bat
+```
+
+### Архивация диалогов
+
+Откройте:
+
+```text
+архивация acc1.bat
+```
+
+### Сбор участников
+
+Откройте:
+
+```text
+сбор участников acc1.bat
+```
+
+В окне выберите группу/канал и способ сбора. Готовый список сохранится в папку `lists`.
+
+## Самостоятельный запуск через терминал
+
+Этот вариант нужен, если вы хотите запускать проект командами, менять настройки руками или понимать, откуда берутся списки, сообщения и прогресс.
+
+Все команды ниже выполняются из корня проекта в PowerShell.
+
+### Установка
+
+```powershell
 npm install
-cp .env.example .env
-npm start
 ```
 
-## Настройка `.env`
+### Файл настроек аккаунта
 
-- `API_ID` / `API_HASH` — заполнять не нужно; если указаны оба корректно, скрипт использует их вместо встроенных.
-- `AUTH_METHOD=qr` (по умолчанию) или `phone`.
-- `SESSION_STRING` — можно оставить пустым; после авторизации сохранится автоматически.
-- Прокси (если нужен): `SOCKS_PROXY=127.0.0.1:1080`, `SOCKS_TYPE=5`, `TELEGRAM_TRANSPORT=obfuscated`. Если прокси пустой — работает без него.
-- Стикер: если не заданы `STICKER_SET_INDEX` / `STICKER_DOC_INDEX`, скрипт попросит отправить стикер в «Избранное» и возьмёт его. Можно задать руками (индексы с 0) или оставить пустым.
-- Планировщик: `SCHEDULE_HOUR`, `SCHEDULE_MINUTE` — время (местное) для ежедневного автозапуска при использовании `npm run schedule`.
-- Профили и файлы:
-  - `PROFILE=acc1` — метка профиля (используется для путей storage при `STORAGE_MODE=per_profile`).
-  - `STORAGE_MODE=shared|per_profile` — общий или раздельный стор.
-  - `REPORT_FILE` — путь к отчёту (иначе общий или `storage/<profile>/report.csv` при per_profile).
-  - `LIST_FILE` — имя файла в `lists/` (если не задан — интерактивный выбор).
-  - `MESSAGE_FILES` — имена через запятую из `messages/` (если не задано — берётся из `MESSAGE_CONFIG.TEXT_FILE_NAMES`).
+Для `acc1` используется файл `.env.acc1`. Если его ещё нет, создайте из примера:
 
-## Запуск рассылки
-
-1) `npm start`
-2) При первом запуске авторизация:
-   - QR: скан из терминала (`Настройки -> Устройства -> Подключить устройство`).
-   - Phone: код в приложении / SMS; команды: `/resend`, `/sms`, `/app`.
-3) Выбор списка: скрипт покажет файлы в `lists/`, введите номер. Прогресс общий — если хотите независимый прогресс для разных списков, меняйте/чистите `storage/`.
-4) Сообщения берутся из `messages/`, настроены в `src/config.js` (`MESSAGE_CONFIG.TEXT_FILE_NAMES`).
-5) Стикер берётся из первого набора аккаунта (можно отключить `STICKER_CONFIG.ENABLED`).
-
-## Архивация диалогов (без рассылки)
-
-```bash
-npm run archive        # .env
-npm run archive:acc1   # .env.acc1
+```powershell
+Copy-Item example.env.acc1 .env.acc1
+notepad .env.acc1
 ```
 
-Критерии архивации (по умолчанию):
-- приватный чат, не в архиве;
-- нет входящих после вашего первого исходящего;
-- исходящих ≥ 2, одно длинное (>=400 символов);
-- последнее исходящее старше 24 часов;
-- сам диалог не старше 168 часов (неделя) по умолчанию;
-- максимум 30 диалогов за проход.
-Настраивается через `ARCHIVE_*` переменные в `.env`.
+Главное, что обычно меняется в `.env.acc1`:
 
-## Планировщик (ежедневный запуск)
+- `SESSION_STRING` - строка сессии Telegram. Можно оставить пустой, после входа сохранится автоматически.
+- `LIST_FILE` - имя списка из папки `lists`.
+- `MESSAGE_FILES` - имя файла сообщения из папки `messages`. Несколько файлов можно указать через запятую.
+- `PROFILE=acc1` - имя профиля.
+- `STORAGE_MODE=shared` - общий прогресс, `per_profile` - отдельный прогресс в `storage/acc1`.
+- `REPORT_FILE` - путь к отчёту, если нужен нестандартный.
+- `SOCKS_PROXY` и `SOCKS_TYPE` - прокси, если используется.
+- `STICKER_SET_INDEX` и `STICKER_DOC_INDEX` - какой стикер брать из наборов аккаунта.
+- `SCHEDULE_HOUR` и `SCHEDULE_MINUTE` - время запуска для планировщика.
 
-```bash
-npm run schedule        # .env
-npm run schedule:acc1   # .env.acc1
-```
-- Ждёт до указанного времени (по умолчанию 12:00), запускает рассылку, после завершения планирует следующий день.
-- Если `SCHEDULE_START_IMMEDIATELY=true`, первый запуск идёт сразу, а дальше — по расписанию.
-- Время задаётся `SCHEDULE_HOUR` / `SCHEDULE_MINUTE` в `.env`.
+### Вход через QR без рассылки
 
-## Где хранится состояние
-
-- `storage/processed-users.json` — кого уже отправили.
-- `storage/progress-state.json` — указатель строки.
-- `storage/daily-stats.json` — счётчики за день.
-Чтобы начать заново: очистить `storage/` или удалить нужные файлы.
-
-## Лимиты по умолчанию (см. `src/config.js`)
-
-- Между сообщениями: 3000 мс.
-- Между пользователями: 60000 мс.
-- После каждых 20 попыток — пауза 30 мин.
-
-## Запуск в Docker
-
-1. Создайте рабочий `.env` рядом с [`docker-compose.yml`](docker-compose.yml) на основе [`example.env.acc1`](example.env.acc1).
-2. Для первого интерактивного входа выполните:
-
-```bash
-docker compose run --rm telegram-sender
+```powershell
+$env:AUTH_METHOD = "qr"
+$env:PROBE_MODE = "true"
+$env:PROBE_IDLE_MS = "1000"
+npm run start:acc1
+Remove-Item Env:\AUTH_METHOD, Env:\PROBE_MODE, Env:\PROBE_IDLE_MS -ErrorAction SilentlyContinue
 ```
 
-3. После сохранения `SESSION_STRING` в [`.env`](.env) можно запускать в фоне:
+После сканирования QR-кода `SESSION_STRING` будет записан в `.env.acc1`.
 
-```bash
-docker compose up -d telegram-sender
+### Рассылка
+
+```powershell
+npm run start:acc1
 ```
 
-4. Для режима ежедневного расписания:
+Скрипт берёт получателей из `lists/<LIST_FILE>`, сообщения из `messages/<MESSAGE_FILES>` и продолжает с сохранённого места, если запуск уже был.
 
-```bash
-docker compose --profile scheduler up -d telegram-scheduler
+### Архивация
+
+```powershell
+npm run archive:acc1
 ```
 
-### Что монтируется
+Архивация работает без рассылки. Условия настраиваются переменными `ARCHIVE_*` в `.env.acc1`.
 
-- [`./lists`](lists/) → `/app/lists`
-- [`./messages`](messages/) → `/app/messages`
-- [`./storage`](storage/) → `/app/storage`
-- [`./report.csv`](report.csv) → `/app/report.csv`
-- [`.env`](.env) → `/app/.env`
+### Сбор участников
 
-### Полезные команды
+Интерактивный запуск:
 
-```bash
-docker compose build
-docker compose up telegram-sender
-docker compose logs -f telegram-sender
-docker compose run --rm telegram-sender npm run archive
-docker compose --profile scheduler up -d telegram-scheduler
+```powershell
+npm run parse:acc1
 ```
 
-### Замечания по деплою
+Сразу указать цель:
 
-- [`Dockerfile`](Dockerfile) использует базовый образ `node:20-bookworm-slim`.
-- [`docker-compose.yml`](docker-compose.yml) включает `stdin_open: true` и `tty: true`, чтобы работали QR-логин и интерактивные prompts.
-- Для полностью неинтерактивного деплоя заранее сохраните `SESSION_STRING` и укажите `LIST_FILE`/`MESSAGE_FILES` в [`.env`](.env).
-- Если `report.csv` отсутствует, создайте пустой файл перед запуском: `touch report.csv`.
+```powershell
+npm run parse:acc1 -- @channel_username
+```
+
+Парсер умеет собирать всех участников, активных пользователей из истории сообщений или комментаторов постов канала. Результат сохраняется в `lists`.
+
+### Планировщик
+
+```powershell
+npm run schedule:acc1
+```
+
+Время берётся из `SCHEDULE_HOUR` и `SCHEDULE_MINUTE` в `.env.acc1`. Если добавить `SCHEDULE_START_IMMEDIATELY=true`, первый запуск начнётся сразу.
+
+### Где лежат данные
+
+- `lists/` - списки пользователей и результаты сбора.
+- `messages/` - тексты сообщений.
+- `storage/` - прогресс, обработанные пользователи, дневная статистика и логи.
+- `report.csv` - отчёт при общем режиме `STORAGE_MODE=shared`.
+- `storage/acc1/report.csv` - отчёт при `STORAGE_MODE=per_profile`.
+
+Чтобы начать рассылку заново, остановите скрипт и удалите нужные файлы прогресса из `storage` или `storage/acc1`.
