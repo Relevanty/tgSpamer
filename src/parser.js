@@ -2,6 +2,7 @@ import "dotenv/config";
 import fs from "node:fs/promises";
 import path from "node:path";
 import input from "input";
+import ExcelJS from "exceljs";
 import qrcodeTerminal from "qrcode-terminal";
 import { Api, TelegramClient } from "telegram";
 import {
@@ -328,6 +329,141 @@ function sanitizeFileName(value) {
   return sanitized || "parsed-users";
 }
 
+function formatMessageDate(value) {
+  if (!value) {
+    return "";
+  }
+  const date =
+    value instanceof Date
+      ? value
+      : new Date(typeof value === "number" && value < 1000000000000 ? value * 1000 : value);
+  if (Number.isNaN(date.getTime())) {
+    return String(value);
+  }
+  const pad = (number) => String(number).padStart(2, "0");
+  return [
+    date.getFullYear(),
+    pad(date.getMonth() + 1),
+    pad(date.getDate()),
+  ].join("-") + ` ${pad(date.getHours())}:${pad(date.getMinutes())}:${pad(date.getSeconds())}`;
+}
+
+function getMessageText(message) {
+  return String(message?.message ?? message?.text ?? "").trim();
+}
+
+function getTelegramEntityIdForLink(entity) {
+  const rawId = String(entity?.id ?? "").trim();
+  return rawId.replace(/^-100/, "").replace(/^-/, "");
+}
+
+function buildTelegramMessageLink(entity, messageId, commentId = null) {
+  if (!messageId) {
+    return "";
+  }
+
+  const username = String(entity?.username ?? "").trim().replace(/^@/, "");
+  const commentSuffix = commentId ? `?comment=${commentId}` : "";
+
+  if (username) {
+    return `https://t.me/${username}/${messageId}${commentSuffix}`;
+  }
+
+  const entityId = getTelegramEntityIdForLink(entity);
+  if (entityId) {
+    return `https://t.me/c/${entityId}/${messageId}${commentSuffix}`;
+  }
+
+  return "";
+}
+
+function addCommentSource(commentSources, entity, post, comment, user, userIdentifier) {
+  if (!commentSources) {
+    return;
+  }
+
+  const existing = commentSources.get(userIdentifier);
+  if (existing) {
+    return;
+  }
+
+  const username = String(user?.username ?? "").trim();
+  const commentId = comment?.id ?? "";
+  const postId = post?.id ?? "";
+
+  commentSources.set(userIdentifier, {
+    nick: username ? `@${username.replace(/^@/, "")}` : userIdentifier,
+    commentLink: buildTelegramMessageLink(entity, postId, commentId),
+    commentDate: formatMessageDate(comment?.date),
+    commentText: getMessageText(comment),
+  });
+}
+
+async function saveCommentSourcesWorkbook(outPath, commentSources) {
+  const parsedPath = path.parse(outPath);
+  const sourcesPath = path.join(parsedPath.dir, `${parsedPath.name}_comments.xlsx`);
+  const workbook = new ExcelJS.Workbook();
+  workbook.creator = "Telegram Parser";
+  workbook.created = new Date();
+
+  const worksheet = workbook.addWorksheet("Комментарии", {
+    views: [{ state: "frozen", ySplit: 1 }],
+  });
+
+  worksheet.columns = [
+    { header: "Ник", key: "nick", width: 24 },
+    { header: "Ссылка на комментарий", key: "commentLink", width: 48 },
+    { header: "Комментарий", key: "commentText", width: 90 },
+    { header: "Дата комментария", key: "commentDate", width: 22 },
+  ];
+  worksheet.autoFilter = "A1:D1";
+
+  const headerRow = worksheet.getRow(1);
+  headerRow.height = 24;
+  headerRow.font = { bold: true };
+  headerRow.alignment = { vertical: "middle", horizontal: "center", wrapText: true };
+  headerRow.eachCell((cell) => {
+    cell.fill = {
+      type: "pattern",
+      pattern: "solid",
+      fgColor: { argb: "FFE7EEF8" },
+    };
+    cell.border = {
+      bottom: { style: "thin", color: { argb: "FFB7C9E2" } },
+    };
+  });
+
+  for (const source of Array.from(commentSources.values()).sort((a, b) =>
+    a.nick.localeCompare(b.nick, "ru"),
+  )) {
+    const row = worksheet.addRow({
+      nick: source.nick,
+      commentLink: source.commentLink,
+      commentText: source.commentText,
+      commentDate: source.commentDate,
+    });
+
+    if (source.commentLink) {
+      row.getCell(2).value = { text: source.commentLink, hyperlink: source.commentLink };
+      row.getCell(2).font = { color: { argb: "FF0563C1" }, underline: true };
+    }
+
+    row.alignment = { vertical: "top", wrapText: true };
+    row.getCell(1).alignment = { vertical: "top" };
+    row.getCell(2).alignment = { vertical: "top", wrapText: false };
+    row.getCell(3).alignment = { vertical: "top", wrapText: true };
+    row.getCell(4).alignment = { vertical: "top" };
+  }
+
+  worksheet.getColumn(1).alignment = { vertical: "top" };
+  worksheet.getColumn(2).alignment = { vertical: "top" };
+  worksheet.getColumn(3).alignment = { vertical: "top", wrapText: true };
+  worksheet.getColumn(4).alignment = { vertical: "top" };
+
+  await workbook.xlsx.writeFile(sourcesPath);
+  console.log(`Комментарии сохранены в ${sourcesPath}`);
+}
+
 function describeEntity(entity) {
   if (entity?.broadcast) {
     return "канал";
@@ -498,7 +634,7 @@ async function collectActiveUsers(client, entity, participants) {
   }
 }
 
-async function collectCommenters(client, entity, participants) {
+async function collectCommenters(client, entity, participants, commentSources = null) {
   try {
     const fullChannel = await client.invoke(new Api.channels.GetFullChannel({ channel: entity }));
     const linkedChatId = fullChannel.fullChat.linkedChatId;
@@ -564,6 +700,7 @@ async function collectCommenters(client, entity, participants) {
         const id = getUserIdentifier(user);
         if (id) {
           participants.add(id);
+          addCommentSource(commentSources, entity, post, msg, user, id);
         }
       }
 
@@ -575,7 +712,7 @@ async function collectCommenters(client, entity, participants) {
   }
 }
 
-async function saveParticipants(entity, participants) {
+async function saveParticipants(entity, participants, commentSources = null) {
   const defaultBaseName = sanitizeFileName(entity.username || entity.title || entity.id);
   let outName = await input.text(`Введите имя файла для сохранения [${defaultBaseName}]: `, {
     default: defaultBaseName,
@@ -592,6 +729,10 @@ async function saveParticipants(entity, participants) {
   await fs.writeFile(outPath, `${lines.join("\n")}\n`, "utf8");
 
   console.log(`Сохранено в ${outPath}`);
+
+  if (commentSources?.size > 0) {
+    await saveCommentSourcesWorkbook(outPath, commentSources);
+  }
 }
 
 async function promptParseMethod() {
@@ -612,13 +753,14 @@ async function runParseScenario(client, entity) {
   }
 
   const participants = new Set();
+  const commentSources = parseMethod === "comments" ? new Map() : null;
 
   if (parseMethod === "all") {
     await collectAllParticipants(client, entity, participants);
   } else if (parseMethod === "active") {
     await collectActiveUsers(client, entity, participants);
   } else if (parseMethod === "comments") {
-    await collectCommenters(client, entity, participants);
+    await collectCommenters(client, entity, participants, commentSources);
   }
 
   if (participants.size === 0) {
@@ -627,7 +769,7 @@ async function runParseScenario(client, entity) {
   }
 
   console.log(`Собрано ${participants.size} уникальных пользователей.`);
-  await saveParticipants(entity, participants);
+  await saveParticipants(entity, participants, commentSources);
   return { completed: true, back: false };
 }
 
