@@ -8,6 +8,9 @@
     "start:acc1": "node tools/start.js .env.acc1",
     "start:acc2": "node tools/start.js .env.acc2",
     "start:acc3": "node tools/start.js .env.acc3",
+    "login:acc1": "node tools/login.js .env.acc1",
+    "login:acc2": "node tools/login.js .env.acc2",
+    "login:acc3": "node tools/login.js .env.acc3",
     "archive": "node tools/start.js --archive",
     "archive:acc1": "node tools/start.js .env.acc1 --archive",
     "archive:acc2": "node tools/start.js .env.acc2 --archive",
@@ -20,7 +23,7 @@
     "schedule:acc1": "node tools/schedule.js .env.acc1",
     "schedule:acc2": "node tools/schedule.js .env.acc2",
     "schedule:acc3": "node tools/schedule.js .env.acc3",
-    "check": "node --check src/index.js && node --check src/parser.js && node --check tools/parse.js",
+    "check": "node --check src/index.js && node --check src/parser.js && node --check tools/parse.js && node --check tools/login.js",
     "update": "node tools/update.js"
   },
   "dependencies": {

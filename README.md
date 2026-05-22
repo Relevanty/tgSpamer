@@ -74,14 +74,17 @@ notepad .env.acc1
 ### Вход через QR без рассылки
 
 ```powershell
-$env:AUTH_METHOD = "qr"
-$env:PROBE_MODE = "true"
-$env:PROBE_IDLE_MS = "1000"
-npm run start:acc1
-Remove-Item Env:\AUTH_METHOD, Env:\PROBE_MODE, Env:\PROBE_IDLE_MS -ErrorAction SilentlyContinue
+npm run login:acc1
 ```
 
 После сканирования QR-кода `SESSION_STRING` будет записан в `.env.acc1`.
+
+Для других аккаунтов:
+
+```powershell
+npm run login:acc2
+npm run login:acc3
+```
 
 ### Рассылка
 
@@ -114,6 +117,8 @@ npm run parse:acc1 -- @channel_username
 ```
 
 Парсер умеет собирать всех участников, активных пользователей из истории сообщений или комментаторов постов канала. Результат сохраняется в `lists`. Для комментаторов дополнительно создаётся Excel-файл `*_comments.xlsx`: ник, ссылка, комментарий и дата.
+
+После сохранения списка парсер предложит выбрать его для рассылки. Если ответить `Да`, он обновит `LIST_FILE` в текущем `.env.accX` и сбросит `progress-state.json` для выбранного `STORAGE_MODE`.
 
 ### Планировщик
 

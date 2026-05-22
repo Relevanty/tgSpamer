@@ -17,15 +17,11 @@ if not exist ".env.acc2" (
   )
 )
 
-set "AUTH_METHOD=qr"
-set "PROBE_MODE=true"
-set "PROBE_IDLE_MS=1000"
-
 echo Вход acc2.
 echo После сканирования QR SESSION_STRING сохранится в .env.acc2.
 echo.
 
-call npm run start:acc2
+call npm run login:acc2
 set "EXIT_CODE=%ERRORLEVEL%"
 
 echo.

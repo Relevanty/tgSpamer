@@ -116,6 +116,55 @@ async function upsertEnvValue(filePath, key, value) {
   await fs.writeFile(filePath, nextContent, "utf8");
 }
 
+async function removeFileIfExists(filePath) {
+  try {
+    await fs.access(filePath);
+    await fs.rm(filePath, { force: true });
+    return true;
+  } catch (error) {
+    if (error?.code !== "ENOENT") {
+      throw error;
+    }
+    return false;
+  }
+}
+
+function getProgressStatePath() {
+  const storageMode = String(process.env.STORAGE_MODE ?? "shared").trim().toLowerCase();
+
+  if (storageMode === "per_profile") {
+    const profile = String(process.env.PROFILE ?? "default").trim() || "default";
+    return path.resolve("storage", profile, "progress-state.json");
+  }
+
+  return path.resolve("storage", "progress-state.json");
+}
+
+async function promptUseListForSending(fileName) {
+  const useForSending = await input.select("Выбрать этот список для рассылки?", [
+    { name: "Да", value: true },
+    { name: "Нет", value: false },
+  ]);
+
+  if (!useForSending) {
+    return;
+  }
+
+  const envPath = getActiveEnvPath();
+  await upsertEnvValue(envPath, "LIST_FILE", fileName);
+  process.env.LIST_FILE = fileName;
+
+  const progressPath = getProgressStatePath();
+  const removedProgress = await removeFileIfExists(progressPath);
+
+  console.log(`LIST_FILE обновлен в ${formatEnvPath(envPath)}: ${fileName}`);
+  if (removedProgress) {
+    console.log(`Прогресс рассылки сброшен: ${formatEnvPath(progressPath)}`);
+  } else {
+    console.log(`Файл прогресса не найден, сбрасывать нечего: ${formatEnvPath(progressPath)}`);
+  }
+}
+
 function validateEnv() {
   const envApiId = Number(String(process.env.API_ID ?? "").trim());
   const envApiHash = String(process.env.API_HASH ?? "").trim();
@@ -733,6 +782,8 @@ async function saveParticipants(entity, participants, commentSources = null) {
   if (commentSources?.size > 0) {
     await saveCommentSourcesWorkbook(outPath, commentSources);
   }
+
+  return { fileName: outName, filePath: outPath };
 }
 
 async function promptParseMethod() {
@@ -769,7 +820,8 @@ async function runParseScenario(client, entity) {
   }
 
   console.log(`Собрано ${participants.size} уникальных пользователей.`);
-  await saveParticipants(entity, participants, commentSources);
+  const savedList = await saveParticipants(entity, participants, commentSources);
+  await promptUseListForSending(savedList.fileName);
   return { completed: true, back: false };
 }
 
