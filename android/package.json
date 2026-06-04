@@ -1,0 +1,36 @@
+{
+  "name": "relevanty-spamer-node",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "start": "node tools/start.js",
+    "start:acc1": "node tools/start.js .env.acc1",
+    "start:acc2": "node tools/start.js .env.acc2",
+    "start:acc3": "node tools/start.js .env.acc3",
+    "login:acc1": "node tools/login.js .env.acc1",
+    "login:acc2": "node tools/login.js .env.acc2",
+    "login:acc3": "node tools/login.js .env.acc3",
+    "archive": "node tools/start.js --archive",
+    "archive:acc1": "node tools/start.js .env.acc1 --archive",
+    "archive:acc2": "node tools/start.js .env.acc2 --archive",
+    "archive:acc3": "node tools/start.js .env.acc3 --archive",
+    "parse": "node tools/parse.js",
+    "parse:acc1": "node tools/parse.js .env.acc1",
+    "parse:acc2": "node tools/parse.js .env.acc2",
+    "parse:acc3": "node tools/parse.js .env.acc3",
+    "schedule": "node tools/schedule.js",
+    "schedule:acc1": "node tools/schedule.js .env.acc1",
+    "schedule:acc2": "node tools/schedule.js .env.acc2",
+    "schedule:acc3": "node tools/schedule.js .env.acc3",
+    "check": "node --check src/index.js && node --check src/parser.js && node --check tools/parse.js && node --check tools/login.js",
+    "update": "node tools/update.js"
+  },
+  "dependencies": {
+    "dotenv": "^16.6.1",
+    "exceljs": "^4.4.0",
+    "input": "^1.0.1",
+    "qrcode-terminal": "^0.12.0",
+    "telegram": "^2.26.22"
+  }
+}
