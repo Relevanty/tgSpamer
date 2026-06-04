@@ -523,34 +523,40 @@ function describeEntity(entity) {
   return "чат";
 }
 
-function isPublicGroupOrChannel(entity) {
+function isGroupOrChannel(entity) {
   const className = String(entity?.className ?? "");
-  const username = String(entity?.username ?? "").trim();
-  return username && (className === "Channel" || className === "Chat");
+  return className === "Channel" || className === "Chat";
 }
 
-async function listPublicDialogs(client) {
+function formatDialogName(dialog) {
+  const entity = dialog.entity;
+  const username = String(entity?.username ?? "").trim();
+  const title = String(dialog.title || entity?.title || username || entity?.id || "Без названия").trim();
+  const access = username ? `@${username}` : "приватный";
+  return `${title} (${access}) - ${describeEntity(entity)}`;
+}
+
+async function listAccountGroupDialogs(client) {
   const limit = parseIntegerEnv("PARSER_DIALOG_LIMIT", 300, 1);
   const dialogs = [];
   const seenIds = new Set();
 
   for await (const dialog of client.iterDialogs({ limit })) {
     const entity = dialog.entity;
-    if (!isPublicGroupOrChannel(entity)) {
+    if (!isGroupOrChannel(entity)) {
       continue;
     }
 
-    const id = String(entity.id ?? entity.username);
+    const className = String(entity.className ?? "Entity");
+    const id = `${className}:${String(entity.id ?? entity.username)}`;
     if (seenIds.has(id)) {
       continue;
     }
     seenIds.add(id);
 
-    const username = String(entity.username).trim();
-    const title = String(dialog.title || entity.title || username).trim();
     dialogs.push({
       entity,
-      name: `${title} (@${username}) - ${describeEntity(entity)}`,
+      name: formatDialogName(dialog),
       value: entity,
     });
   }
@@ -591,7 +597,7 @@ async function promptManualTarget(client) {
 async function promptTargetEntity(client) {
   while (true) {
     const source = await input.select("Откуда взять группу/канал для парсинга?", [
-      { name: "Выбрать из публичных групп/каналов аккаунта", value: "account" },
+      { name: "Выбрать из групп/каналов аккаунта", value: "account" },
       { name: "Ввести ссылку / username / ID вручную", value: "manual" },
       { name: "Завершить", value: NAV_EXIT },
     ]);
@@ -608,17 +614,17 @@ async function promptTargetEntity(client) {
       return entity;
     }
 
-    console.log("Загружаю публичные группы и каналы аккаунта...");
+    console.log("Загружаю группы и каналы аккаунта...");
     let dialogs = [];
     try {
-      dialogs = await listPublicDialogs(client);
+      dialogs = await listAccountGroupDialogs(client);
     } catch (error) {
       console.error(`Ошибка при загрузке списка групп/каналов: ${getErrorMessage(error)}`);
       continue;
     }
 
     if (dialogs.length === 0) {
-      console.log("Публичные группы/каналы в аккаунте не найдены. Можно ввести ссылку вручную.");
+      console.log("Группы/каналы в аккаунте не найдены. Можно ввести ссылку вручную.");
       const entity = await promptManualTarget(client);
       if (entity === NAV_BACK) {
         continue;
