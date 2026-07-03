@@ -1,0 +1,12 @@
+{
+  "name": "people-bleacher-mobile-worker",
+  "version": "0.1.0",
+  "description": "Node.js Mobile worker for People Bleacher Android PoC",
+  "main": "main.js",
+  "private": true,
+  "license": "UNLICENSED",
+  "dependencies": {
+    "exceljs": "^4.4.0",
+    "telegram": "^2.26.22"
+  }
+}

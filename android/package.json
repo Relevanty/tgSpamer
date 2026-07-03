@@ -1,0 +1,35 @@
+{
+  "name": "org.peoplebleacher.mobile",
+  "displayName": "People Bleacher",
+  "version": "0.1.0",
+  "description": "Local Android proof of concept for the People Bleacher workflow.",
+  "main": "index.js",
+  "scripts": {
+    "worker:install": "cd www/nodejs-project && npm install --omit=optional",
+    "patch:nodejs-mobile": "node scripts/patch-nodejs-mobile-cordova-hooks.mjs",
+    "reset:android-www": "node scripts/reset-android-www.mjs",
+    "preandroid:prepare": "npm run patch:nodejs-mobile && npm run reset:android-www",
+    "android:prepare": "cordova prepare android",
+    "preandroid:build": "npm run patch:nodejs-mobile",
+    "android:build": "cordova compile android --debug",
+    "check:hse": "node scripts/check-list.mjs"
+  },
+  "keywords": [
+    "ecosystem:cordova"
+  ],
+  "author": "People Bleacher",
+  "license": "UNLICENSED",
+  "devDependencies": {
+    "cordova": "^12.0.0",
+    "cordova-android": "^11.0.0",
+    "nodejs-mobile-cordova": "^0.4.3"
+  },
+  "cordova": {
+    "platforms": [
+      "android"
+    ],
+    "plugins": {
+      "nodejs-mobile-cordova": {}
+    }
+  }
+}

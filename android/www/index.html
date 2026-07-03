@@ -1,0 +1,256 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self' data: https://ssl.gstatic.com 'unsafe-eval'; style-src 'self' 'unsafe-inline'; media-src *; img-src 'self' data: content:;">
+    <meta name="format-detection" content="telephone=no">
+    <meta name="msapplication-tap-highlight" content="no">
+    <meta name="viewport" content="initial-scale=1, width=device-width, viewport-fit=cover">
+    <meta name="color-scheme" content="light">
+    <link rel="stylesheet" href="css/index.css">
+    <title>People Bleacher</title>
+  </head>
+  <body>
+    <main class="shell">
+      <header class="topbar">
+        <div>
+          <h1>People Bleacher</h1>
+          <p id="engineStatus" class="status">Запуск Android UI</p>
+        </div>
+        <button id="refreshButton" class="iconButton" type="button" aria-label="Обновить">↻</button>
+      </header>
+
+      <nav class="tabs" aria-label="Разделы">
+        <button class="tab active" type="button" data-tab="accounts">Акки</button>
+        <button class="tab" type="button" data-tab="settings">Конфиг</button>
+        <button class="tab" type="button" data-tab="parser">Сбор</button>
+        <button class="tab" type="button" data-tab="log">Лог</button>
+      </nav>
+
+      <section id="accounts" class="panel active">
+        <div id="accountGrid" class="accountGrid"></div>
+        <div id="authBox" class="authBox hidden">
+          <div class="accountHeader">
+            <h2 id="authTitle" class="accountName">Вход</h2>
+            <span id="authStage" class="badge">телефон</span>
+          </div>
+          <div class="formGrid">
+            <label class="field" id="phoneField">
+              <span>Номер Telegram</span>
+              <input id="phoneInput" type="tel" autocomplete="tel" placeholder="+79990000000">
+            </label>
+            <label class="field hidden" id="codeField">
+              <span>Код Telegram</span>
+              <input id="codeInput" type="text" inputmode="numeric" autocomplete="one-time-code" placeholder="12345">
+            </label>
+            <label class="field hidden" id="passwordField">
+              <span>Пароль 2FA</span>
+              <input id="passwordInput" type="password" autocomplete="current-password">
+            </label>
+            <div class="actionRow">
+              <button id="sendPhoneButton" class="primary" type="button">Номер</button>
+              <button id="cancelAuthButton" type="button">Отмена</button>
+            </div>
+            <div class="actionRow hidden" id="authCodeActions">
+              <button id="sendCodeButton" class="primary" type="button">Код</button>
+              <button id="sendPasswordButton" class="primary hidden" type="button">2FA</button>
+            </div>
+            <div id="authStatus" class="resultBox">Ожидание номера</div>
+          </div>
+        </div>
+      </section>
+
+      <section id="settings" class="panel">
+        <div class="formGrid">
+          <div class="twoCol">
+            <label class="field">
+              <span>Аккаунт</span>
+              <select id="settingsSlotSelect">
+                <option value="acc1">ACC1</option>
+                <option value="acc2">ACC2</option>
+                <option value="acc3">ACC3</option>
+              </select>
+            </label>
+            <label class="field">
+              <span>Список</span>
+              <select id="settingsListSelect">
+                <option value="">Нет списков</option>
+              </select>
+            </label>
+          </div>
+
+          <div class="actionRow">
+            <label class="fileButton">
+              <input id="listFileInput" type="file" accept=".txt,text/plain">
+              Импорт .txt
+            </label>
+            <button id="refreshListsButton" type="button">Обновить</button>
+          </div>
+
+          <label class="field">
+            <span>Имя файла списка</span>
+            <input id="listFileNameInput" type="text" placeholder="acc1.txt">
+          </label>
+          <label class="field">
+            <span>Текст списка</span>
+            <textarea id="listText" rows="6" placeholder="@username"></textarea>
+          </label>
+          <div class="actionRow">
+            <button id="saveListButton" class="primary" type="button">Сохранить список</button>
+            <button id="checkListButton" type="button">Проверить список</button>
+          </div>
+          <div id="listCheckResult" class="resultBox compactBox">Ожидание списка</div>
+
+          <label class="field">
+            <span>Сообщение</span>
+            <textarea id="messageText" rows="5" placeholder="Текст рассылки"></textarea>
+          </label>
+          <div class="actionRow">
+            <label class="fileButton">
+              <input id="messageFileInput" type="file" accept=".txt,text/plain">
+              Импорт сообщения
+            </label>
+            <button id="saveMessageButton" type="button">Сохранить msg</button>
+          </div>
+
+          <label class="field">
+            <span>Имя файла сообщения</span>
+            <input id="messageFileNameInput" type="text" placeholder="1.txt">
+          </label>
+          <label class="field">
+            <span>Файлы сообщений</span>
+            <select id="messageFileSelect" multiple size="4"></select>
+          </label>
+          <label class="checkField">
+            <input id="sendTextFiles" type="checkbox">
+            <span>Отправлять выбранные message-файлы</span>
+          </label>
+          <label class="checkField">
+            <input id="randomizeSingleText" type="checkbox">
+            <span>Случайно выбирать одно сообщение из пула</span>
+          </label>
+          <label class="checkField">
+            <input id="sendIntroText" type="checkbox">
+            <span>Отправлять intro перед основным текстом</span>
+          </label>
+          <label class="field">
+            <span>Intro text</span>
+            <textarea id="introText" rows="3" placeholder="Дополнительный первый текст"></textarea>
+          </label>
+
+          <div class="twoCol">
+            <label class="field">
+              <span>Пауза между людьми, сек</span>
+              <input id="delayInput" type="number" min="1" step="1" value="60">
+            </label>
+            <label class="field">
+              <span>Пауза между сообщениями, сек</span>
+              <input id="messageDelayInput" type="number" min="0" step="1" value="3">
+            </label>
+          </div>
+
+          <div class="twoCol">
+            <label class="field">
+              <span>Людей в пакете</span>
+              <input id="usersPerBatchInput" type="number" min="1" step="1" value="20">
+            </label>
+            <label class="field">
+              <span>Пауза пакета, мин</span>
+              <input id="batchDelayInput" type="number" min="0" step="1" value="30">
+            </label>
+          </div>
+
+          <label class="checkField">
+            <input id="stickerEnabled" type="checkbox">
+            <span>Отправлять стикер</span>
+          </label>
+          <div class="twoCol">
+            <label class="field">
+              <span>Индекс набора</span>
+              <input id="stickerSetIndex" type="number" min="0" step="1" placeholder="0">
+            </label>
+            <label class="field">
+              <span>Индекс стикера</span>
+              <input id="stickerDocIndex" type="number" min="0" step="1" placeholder="0">
+            </label>
+          </div>
+
+          <label class="field">
+            <span>Старт со строки</span>
+            <input id="startRowInput" type="number" min="1" step="1" placeholder="пусто = продолжить">
+          </label>
+
+          <div class="actionRow">
+            <button id="startCampaignButton" class="primary" type="button">Начать</button>
+            <button id="stopCampaignButton" type="button">Стоп</button>
+          </div>
+          <div class="actionRow">
+            <button id="saveSettingsButton" type="button">Сохранить конфиг</button>
+            <button id="archiveButton" type="button">Архив</button>
+          </div>
+          <div id="campaignStatus" class="resultBox">Рассылка не запущена</div>
+        </div>
+      </section>
+
+      <section id="parser" class="panel">
+        <div class="formGrid">
+          <div class="twoCol">
+            <label class="field">
+              <span>Аккаунт</span>
+              <select id="parserSlotSelect">
+                <option value="acc1">ACC1</option>
+                <option value="acc2">ACC2</option>
+                <option value="acc3">ACC3</option>
+              </select>
+            </label>
+            <label class="field">
+              <span>Метод</span>
+              <select id="parseMethodSelect">
+                <option value="comments">Комментаторы</option>
+                <option value="active">Активные</option>
+                <option value="all">Все участники</option>
+              </select>
+            </label>
+          </div>
+
+          <div class="actionRow">
+            <button id="loadDialogsButton" type="button">Чаты аккаунта</button>
+            <button id="stopParserButton" type="button">Стоп сбор</button>
+          </div>
+
+          <label class="field">
+            <span>Выбор из подписок</span>
+            <select id="dialogSelect">
+              <option value="">Сначала загрузить чаты</option>
+            </select>
+          </label>
+          <label class="field">
+            <span>Ссылка, username или ID</span>
+            <input id="manualTargetInput" type="text" placeholder="@channel или https://t.me/...">
+          </label>
+
+          <div class="twoCol">
+            <label class="field">
+              <span>Постов / сообщений</span>
+              <input id="parseLimitInput" type="number" min="1" step="1" value="100">
+            </label>
+            <label class="field">
+              <span>Файл результата</span>
+              <input id="parseOutputInput" type="text" placeholder="parsed-users.txt">
+            </label>
+          </div>
+
+          <button id="startParserButton" class="primary" type="button">Начать сбор</button>
+          <div id="parserStatus" class="resultBox">Сбор не запущен</div>
+        </div>
+      </section>
+
+      <section id="log" class="panel">
+        <pre id="logOutput" class="logOutput"></pre>
+      </section>
+    </main>
+
+    <script src="cordova.js"></script>
+    <script src="js/index.js"></script>
+  </body>
+</html>
