@@ -96,6 +96,80 @@ function selectConfiguredTextFiles(fileMessages) {
   return fileMessages.filter((fileMessage) => selectedNameSet.has(fileMessage.fileName));
 }
 
+function normalizeConfiguredPath(rawPath) {
+  return String(rawPath ?? "").trim().replace(/[\\/]+/g, path.sep);
+}
+
+function resolveConfiguredPath(rawPath, baseDir) {
+  const configuredPath = normalizeConfiguredPath(rawPath);
+  if (!configuredPath) {
+    return "";
+  }
+
+  if (path.isAbsolute(configuredPath)) {
+    return path.normalize(configuredPath);
+  }
+
+  const firstPathPart = configuredPath
+    .split(path.sep)
+    .find((part) => part && part !== ".");
+  if (firstPathPart?.toLowerCase() === path.basename(baseDir).toLowerCase()) {
+    return path.resolve(configuredPath);
+  }
+
+  return path.resolve(baseDir, configuredPath);
+}
+
+async function isExistingFile(filePath) {
+  try {
+    const stat = await fs.stat(filePath);
+    return stat.isFile();
+  } catch {
+    return false;
+  }
+}
+
+async function loadThirdMessagePayload() {
+  const textFilePath = resolveConfiguredPath(
+    MESSAGE_CONFIG.THIRD_MESSAGE_TEXT_FILE,
+    PATHS.MESSAGES_DIR,
+  );
+  const photoPath = resolveConfiguredPath(
+    MESSAGE_CONFIG.THIRD_MESSAGE_PHOTO_PATH,
+    PATHS.IMAGES_DIR,
+  );
+
+  if (!textFilePath || !photoPath) {
+    return null;
+  }
+
+  let text = "";
+  try {
+    text = (await fs.readFile(textFilePath, "utf8")).trim();
+  } catch (error) {
+    console.log(
+      `Третье сообщение не отправляется: файл текста не найден (${formatEnvPath(textFilePath)}).`,
+    );
+    return null;
+  }
+
+  if (!text) {
+    console.log(
+      `Третье сообщение не отправляется: файл текста пустой (${formatEnvPath(textFilePath)}).`,
+    );
+    return null;
+  }
+
+  if (!(await isExistingFile(photoPath))) {
+    console.log(
+      `Третье сообщение не отправляется: фото не найдено (${formatEnvPath(photoPath)}).`,
+    );
+    return null;
+  }
+
+  return { text, photoPath };
+}
+
 function findResumeIndexFromProcessed(usersFromLists, processedUsers) {
   for (let index = 0; index < usersFromLists.length; index += 1) {
     const recipient = parseRecipientEntry(usersFromLists[index].raw);
@@ -386,6 +460,25 @@ async function loadDailyStats(filePath) {
 async function saveDailyStats(filePath, stats) {
   await fs.mkdir(path.dirname(filePath), { recursive: true });
   await fs.writeFile(filePath, `${JSON.stringify(stats, null, 2)}\n`, "utf8");
+}
+
+async function saveLoginInfo(filePath, me) {
+  const resolvedPath = path.resolve(filePath);
+  await fs.mkdir(path.dirname(resolvedPath), { recursive: true });
+  await fs.writeFile(
+    resolvedPath,
+    `${JSON.stringify(
+      {
+        id: String(me?.id ?? ""),
+        username: String(me?.username ?? ""),
+        firstName: String(me?.firstName ?? ""),
+        lastName: String(me?.lastName ?? ""),
+      },
+      null,
+      2,
+    )}\n`,
+    "utf8",
+  );
 }
 
 function extractMessageText(message) {
@@ -1038,7 +1131,13 @@ async function persistStickerSelection(client, document, stickerSets, envPath) {
   );
 }
 
-async function sendMessagesToUser(client, user, outboundMessages, stickerDocument) {
+async function sendMessagesToUser(
+  client,
+  user,
+  outboundMessages,
+  stickerDocument,
+  thirdMessagePayload,
+) {
   if (stickerDocument) {
     await client.sendFile(user, { file: stickerDocument });
     if (outboundMessages.length > 0) {
@@ -1048,6 +1147,14 @@ async function sendMessagesToUser(client, user, outboundMessages, stickerDocumen
 
   for (let index = 0; index < outboundMessages.length; index += 1) {
     await client.sendMessage(user, { message: outboundMessages[index] });
+
+    if (index === 0 && thirdMessagePayload) {
+      await sleep(RATE_LIMITS.INTER_MESSAGE_DELAY_MS);
+      await client.sendFile(user, {
+        file: thirdMessagePayload.photoPath,
+        caption: thirdMessagePayload.text,
+      });
+    }
 
     const hasNext = index < outboundMessages.length - 1;
     if (hasNext) {
@@ -1073,6 +1180,10 @@ async function main() {
     try {
       const me = await client.getMe();
       console.log(`Вход выполнен как ${me.username || me.firstName || me.id}`);
+      const loginInfoFile = String(process.env.LOGIN_INFO_FILE ?? "").trim();
+      if (loginInfoFile) {
+        await saveLoginInfo(loginInfoFile, me);
+      }
       console.log(
         `Режим проверки соединения включен. Отправки не будет. Наблюдение ${Math.round(connectionOptions.probeIdleMs / 1000)} сек.`,
       );
@@ -1106,6 +1217,7 @@ async function main() {
   const loadedFileMessages = await loadMessageFiles(PATHS.MESSAGES_DIR);
   const fileMessages = selectConfiguredTextFiles(loadedFileMessages);
   const outboundProbe = buildOutboundMessages(fileMessages);
+  const thirdMessagePayload = await loadThirdMessagePayload();
 
   if (outboundProbe.length === 0) {
     throw new Error(
@@ -1225,7 +1337,13 @@ async function main() {
       try {
         console.log(`[${attemptCounter}] Отправка для ${user}`);
         const outboundMessages = buildOutboundMessages(fileMessages);
-        await sendMessagesToUser(client, recipient.peer, outboundMessages, stickerDocument);
+        await sendMessagesToUser(
+          client,
+          recipient.peer,
+          outboundMessages,
+          stickerDocument,
+          thirdMessagePayload,
+        );
 
         processedUsers.add(dedupeKey);
         await saveProcessedUsers(PATHS.PROCESSED_USERS_JSON, processedUsers);

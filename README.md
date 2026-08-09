@@ -69,6 +69,7 @@ notepad .env.acc1
 - `REPORT_FILE` - путь к отчёту, если нужен нестандартный.
 - `SOCKS_PROXY` и `SOCKS_TYPE` - прокси, если используется.
 - `STICKER_SET_INDEX` и `STICKER_DOC_INDEX` - какой стикер брать из наборов аккаунта.
+- `THIRD_MESSAGE_TEXT_FILE` и `THIRD_MESSAGE_PHOTO_PATH` - опциональное сообщение с фото после первого текста.
 - `SCHEDULE_HOUR` и `SCHEDULE_MINUTE` - время запуска для планировщика.
 
 ### Вход через QR без рассылки
@@ -85,6 +86,8 @@ npm run login:acc1
 npm run login:acc2
 npm run login:acc3
 ```
+
+Для нового аккаунта без ручного добавления npm-скриптов запустите `войти.bat`. Он создаст временный конфиг, после успешного QR-входа переименует его в `.env.<username>` или `.env.<first_last>` и добавит `.bat` файлы для входа, запуска, архивации и сбора участников.
 
 ### Рассылка
 

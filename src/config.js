@@ -13,6 +13,7 @@ const reportPath = process.env.REPORT_FILE
 export const PATHS = {
   LISTS_DIR: path.resolve("lists"),
   MESSAGES_DIR: path.resolve("messages"),
+  IMAGES_DIR: path.resolve("images"),
   REPORT_CSV: reportPath,
   PROCESSED_USERS_JSON: path.resolve(storageBase, "processed-users.json"),
   PROGRESS_STATE_JSON: path.resolve(storageBase, "progress-state.json"),
@@ -26,6 +27,8 @@ export const MESSAGE_CONFIG = {
     RANDOMIZE_SINGLE_TEXT: false,
     TEXT_FILE_NAMES: ["1.txt"],
     INTRO_TEXT: ``,
+    THIRD_MESSAGE_TEXT_FILE: process.env.THIRD_MESSAGE_TEXT_FILE ?? "",
+    THIRD_MESSAGE_PHOTO_PATH: process.env.THIRD_MESSAGE_PHOTO_PATH ?? "",
 };
 
 export const STICKER_CONFIG = {
