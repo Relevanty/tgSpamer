@@ -3,7 +3,7 @@ import fs from "node:fs/promises";
 import path from "node:path";
 import input from "input";
 import qrcodeTerminal from "qrcode-terminal";
-import { Api, TelegramClient } from "telegram";
+import { Api, Logger, TelegramClient } from "telegram";
 import { Raw } from "telegram/events/Raw.js";
 import {
   ConnectionTCPAbridged,
@@ -252,6 +252,11 @@ function parseIntegerEnv(name, defaultValue, minValue = Number.NEGATIVE_INFINITY
   return Math.max(parsedValue, minValue);
 }
 
+function parseTelegramLogLevel() {
+  const logLevel = String(process.env.TELEGRAM_LOG_LEVEL ?? "error").trim().toLowerCase();
+  return ["none", "error", "warn", "info", "debug"].includes(logLevel) ? logLevel : "error";
+}
+
 function formatConnectionState(state) {
   if (state === UpdateConnectionState.connected) {
     return "connected";
@@ -305,6 +310,7 @@ function buildConnectionOptions() {
   const useWss = parseBooleanEnv("TELEGRAM_USE_WSS", false);
   const debugConnection = parseBooleanEnv("DEBUG_CONNECTION", false);
   const probeMode = parseBooleanEnv("PROBE_MODE", false);
+  const telegramLogLevel = parseTelegramLogLevel();
   const probeIdleMs = parseIntegerEnv("PROBE_IDLE_MS", 60000, 1000);
   const connectionRetries = parseIntegerEnv("TELEGRAM_CONNECTION_RETRIES", 5, 0);
   const retryDelay = parseIntegerEnv("TELEGRAM_RETRY_DELAY_MS", 1000, 0);
@@ -357,6 +363,7 @@ function buildConnectionOptions() {
   return {
     connection: CONNECTION_TYPES[transportName],
     transportName,
+    telegramLogLevel,
     useWss,
     debugConnection,
     probeMode,
@@ -851,6 +858,7 @@ async function startClient(apiId, apiHash, forceSms, authMethod, connectionOptio
 
   const client = new TelegramClient(stringSession, apiId, apiHash, {
     connection: connectionOptions.connection,
+    baseLogger: new Logger(connectionOptions.telegramLogLevel),
     useWSS: connectionOptions.useWss,
     timeout: connectionOptions.timeout,
     retryDelay: connectionOptions.retryDelay,
@@ -1310,6 +1318,7 @@ async function main() {
 
   let attemptCounter = 0;
   let shouldArchiveAfterStop = false;
+  const peerFloodRetriesByUser = new Map();
 
   try {
     for (let rowIndex = startIndex; rowIndex < usersFromLists.length; rowIndex += 1) {
@@ -1333,6 +1342,7 @@ async function main() {
       usersSeenThisRun.add(dedupeKey);
       attemptCounter += 1;
       let stopAfterCurrentUser = false;
+      let retryCurrentUser = false;
 
       try {
         console.log(`[${attemptCounter}] Отправка для ${user}`);
@@ -1355,6 +1365,7 @@ async function main() {
           `Сессия отправлено: ${sessionSent}. Сегодня отправлено: ${dailyStats[TODAY_KEY].sent}.`,
         );
         peerFloodNoLimitStreak = 0;
+        peerFloodRetriesByUser.delete(dedupeKey);
       } catch (error) {
         const message = getErrorMessage(error);
         console.error(`Ошибка для ${user}: ${message}`);
@@ -1382,7 +1393,7 @@ async function main() {
 
           if (unblockResult.resolved) {
             if (unblockResult.hadRestriction) {
-              console.log("✅ Ограничение снято. Продолжаю.");
+              console.log("✅ Ограничение снято. Повторяю отправку текущему пользователю.");
               await appendLog(user, "PEER_FLOOD resolved after SpamBot");
               peerFloodNoLimitStreak = 0;
             } else {
@@ -1406,6 +1417,19 @@ async function main() {
                 await appendLog(user, "PEER_FLOOD suspected hard limit, will continue until repeat");
               }
             }
+
+            if (!stopAfterCurrentUser) {
+              const retryCount = peerFloodRetriesByUser.get(dedupeKey) ?? 0;
+              if (retryCount >= 1) {
+                console.log("Повторная отправка после PEER_FLOOD снова не прошла. Останавливаю запуск.");
+                stopAfterCurrentUser = true;
+                shouldArchiveAfterStop = true;
+                await appendLog(user, "Stopped: PEER_FLOOD repeated after retry");
+              } else {
+                peerFloodRetriesByUser.set(dedupeKey, retryCount + 1);
+                retryCurrentUser = true;
+              }
+            }
           } else {
             console.error('❌ Разблокировка не удалась или не была выполнена. Останавливаю текущий запуск.');
             stopAfterCurrentUser = true;
@@ -1421,6 +1445,13 @@ async function main() {
           `Запуск остановлен на строке ${rowIndex + 1}. При следующем запуске будет повторная попытка для этого пользователя.`,
         );
         break;
+      }
+
+      if (retryCurrentUser) {
+        usersSeenThisRun.delete(dedupeKey);
+        await saveProgressState(PATHS.PROGRESS_STATE_JSON, rowIndex, usersFromLists.length);
+        rowIndex -= 1;
+        continue;
       }
 
       await saveProgressState(PATHS.PROGRESS_STATE_JSON, nextIndex, usersFromLists.length);
