@@ -25,12 +25,14 @@
     "scan-links:acc1": "node tools/scan-links.js .env.acc1",
     "scan-links:acc2": "node tools/scan-links.js .env.acc2",
     "scan-links:acc3": "node tools/scan-links.js .env.acc3",
+    "sequential": "node tools/run-sequential.js",
+    "sequential:setup": "node tools/setup-sequential.js",
     "schedule": "node tools/schedule.js",
     "schedule:acc1": "node tools/schedule.js .env.acc1",
     "schedule:acc2": "node tools/schedule.js .env.acc2",
     "schedule:acc3": "node tools/schedule.js .env.acc3",
     "dedupe": "node tools/dedupe.js",
-    "check": "node --check src/index.js && node --check src/parser.js && node --check src/linkScanner.js && node --check tools/parse.js && node --check tools/scan-links.js && node --check tools/login.js && node --check tools/dedupe.js",
+    "check": "node --check src/index.js && node --check src/parser.js && node --check src/linkScanner.js && node --check tools/parse.js && node --check tools/scan-links.js && node --check tools/login.js && node --check tools/login-new.js && node --check tools/dedupe.js && node --check tools/sequential-config.js && node --check tools/setup-sequential.js && node --check tools/run-sequential.js",
     "update": "node tools/update.js"
   },
   "dependencies": {

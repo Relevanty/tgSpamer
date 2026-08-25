@@ -145,8 +145,7 @@ function ensureUniqueProfileName(baseName) {
 
   while (
     existsSync(path.resolve(`.env.${candidate}`)) ||
-    existsSync(path.resolve(`запуск ${candidate}.bat`)) ||
-    existsSync(path.resolve(`войти ${candidate}.bat`))
+    existsSync(path.resolve(`запуск ${candidate}.bat`))
   ) {
     candidate = `${baseName}_${index}`;
     index += 1;
@@ -156,21 +155,12 @@ function ensureUniqueProfileName(baseName) {
 }
 
 async function findTemplatePath() {
-  const candidates = [
-    "example.env.acc1",
-    "example.env.acc2",
-    "example.env.acc3",
-    ".env.example",
-  ];
-
-  for (const candidate of candidates) {
-    const filePath = path.resolve(candidate);
-    if (existsSync(filePath)) {
-      return filePath;
-    }
+  const templatePath = path.resolve("templates", "example.env");
+  if (existsSync(templatePath)) {
+    return templatePath;
   }
 
-  throw new Error("Не найден шаблон example.env.acc1 или .env.example.");
+  throw new Error("Не найден шаблон templates/example.env.");
 }
 
 async function createTempEnv(tempEnvPath) {
@@ -222,7 +212,7 @@ function buildBatchContent(title, commandLine) {
     'set "EXIT_CODE=%ERRORLEVEL%"',
     "",
     "echo.",
-    "echo Нажмите любую кнопку, чтобы выйти.",
+    "echo Press any key to exit.",
     "pause >nul",
     "exit /b %EXIT_CODE%",
     "",
@@ -242,30 +232,23 @@ async function writeBatchIfMissing(fileName, content) {
 
 async function createProfileBatchFiles(profileName, envFileName) {
   await writeBatchIfMissing(
-    `войти ${profileName}.bat`,
-    buildBatchContent(
-      `Вход ${profileName}.`,
-      `node tools/login.js "${envFileName}"`,
-    ),
-  );
-  await writeBatchIfMissing(
     `запуск ${profileName}.bat`,
     buildBatchContent(
-      `Запуск рассылки ${profileName}.`,
+      `Start campaign ${profileName}.`,
       `node tools/start.js "${envFileName}"`,
     ),
   );
   await writeBatchIfMissing(
     `архивация ${profileName}.bat`,
     buildBatchContent(
-      `Архивация ${profileName}.`,
+      `Archive ${profileName}.`,
       `node tools/start.js "${envFileName}" --archive`,
     ),
   );
   await writeBatchIfMissing(
     `сбор участников ${profileName}.bat`,
     buildBatchContent(
-      `Сбор участников ${profileName}.`,
+      `Parse users ${profileName}.`,
       `node tools/parse.js "${envFileName}"`,
     ),
   );

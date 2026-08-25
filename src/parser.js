@@ -253,7 +253,7 @@ async function startClientWithPhoneAuth(client, forceSms) {
       );
       return phoneNumberValue;
     },
-    password: async () => input.text("Пароль 2FA (если включен): "),
+    password: async () => input.password("Пароль 2FA (если включен): "),
     phoneCode: async (isCodeViaApp) => {
       const prompt = isCodeViaApp
         ? "Код Telegram (из чата Telegram в приложении): "
@@ -308,7 +308,7 @@ async function startClientWithQrAuth(client, apiId, apiHash) {
         qrcodeTerminal.generate(loginUrl, { small: true });
       },
       password: async (hint) =>
-        input.text(
+        input.password(
           hint ? `Пароль 2FA (подсказка: ${hint}): ` : "Пароль 2FA (если включен): ",
         ),
       onError: async (error) => {
@@ -347,11 +347,6 @@ async function startClient(apiId, apiHash, forceSms, authMethod) {
   if (!sessionString || savedSessionString !== sessionString) {
     await upsertEnvValue(envPath, "SESSION_STRING", savedSessionString);
     console.log(`SESSION_STRING сохранен в ${envLabel}`);
-  }
-
-  if (!sessionString) {
-    console.log(`SESSION_STRING для ${envLabel}:`);
-    console.log(savedSessionString);
   }
 
   return client;

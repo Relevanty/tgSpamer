@@ -3,11 +3,7 @@ setlocal
 chcp 65001 >nul
 cd /d "%~dp0"
 
-echo Universal new account login.
-echo Final config will be created only after successful QR login.
-echo.
-
-call node tools/login-new.js
+call node tools/run-sequential.js
 set "EXIT_CODE=%ERRORLEVEL%"
 
 echo.

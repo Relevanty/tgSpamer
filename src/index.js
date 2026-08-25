@@ -252,6 +252,23 @@ function parseIntegerEnv(name, defaultValue, minValue = Number.NEGATIVE_INFINITY
   return Math.max(parsedValue, minValue);
 }
 
+function parseConfiguredBigInt(value) {
+  const normalized = String(value ?? "").trim();
+  if (!/^-?\d+$/.test(normalized)) {
+    return null;
+  }
+
+  try {
+    return BigInt(normalized);
+  } catch {
+    return null;
+  }
+}
+
+function sameTelegramId(left, right) {
+  return String(left ?? "") === String(right ?? "");
+}
+
 function parseTelegramLogLevel() {
   const logLevel = String(process.env.TELEGRAM_LOG_LEVEL ?? "error").trim().toLowerCase();
   return ["none", "error", "warn", "info", "debug"].includes(logLevel) ? logLevel : "error";
@@ -778,7 +795,7 @@ async function startClientWithPhoneAuth(client, forceSms) {
       );
       return phoneNumberValue;
     },
-    password: async () => input.text("Пароль 2FA (если включен): "),
+    password: async () => input.password("Пароль 2FA (если включен): "),
     phoneCode: async (isCodeViaApp) => {
       const prompt = isCodeViaApp
         ? "Код Telegram (из чата Telegram в приложении): "
@@ -835,7 +852,7 @@ async function startClientWithQrAuth(client, apiId, apiHash) {
         qrcodeTerminal.generate(loginUrl, { small: true });
       },
       password: async (hint) =>
-        input.text(
+        input.password(
           hint ? `Пароль 2FA (подсказка: ${hint}): ` : "Пароль 2FA (если включен): ",
         ),
       onError: async (error) => {
@@ -902,15 +919,35 @@ async function startClient(apiId, apiHash, forceSms, authMethod, connectionOptio
     console.log(`SESSION_STRING сохранен в ${envLabel}`);
   }
 
-  if (!sessionString) {
-    console.log(`SESSION_STRING для ${envLabel}:`);
-    console.log(savedSessionString);
-  }
-
   return { client, diagnosticLog };
 }
 
 async function loadStickerDocument(client, envPath) {
+  const configuredSetId = parseConfiguredBigInt(STICKER_CONFIG.SET_ID);
+  const configuredSetAccessHash = parseConfiguredBigInt(STICKER_CONFIG.SET_ACCESS_HASH);
+  const configuredDocId = parseConfiguredBigInt(STICKER_CONFIG.DOC_ID);
+
+  if (configuredSetId !== null && configuredSetAccessHash !== null && configuredDocId !== null) {
+    const stickerSet = await client.invoke(
+      new Api.messages.GetStickerSet({
+        stickerset: new Api.InputStickerSetID({
+          id: configuredSetId,
+          accessHash: configuredSetAccessHash,
+        }),
+        hash: 0,
+      }),
+    );
+
+    const stickerDocument = stickerSet?.documents?.find((doc) =>
+      sameTelegramId(doc.id, configuredDocId),
+    );
+    if (stickerDocument) {
+      return stickerDocument;
+    }
+
+    console.log("Сохраненный стикер не найден в наборе, пробую старую настройку или выбор из Избранного.");
+  }
+
   const stickerSets = await client.invoke(new Api.messages.GetAllStickers({ hash: 0 }));
   if (!stickerSets?.sets?.length) {
     return null;
@@ -973,7 +1010,9 @@ async function loadStickerDocument(client, envPath) {
     return null;
   }
 
-  return stickerSet.documents[docIndex] ?? stickerSet.documents[0];
+  const stickerDocument = stickerSet.documents[docIndex] ?? stickerSet.documents[0];
+  await persistStickerSelection(client, stickerDocument, stickerSets, envPath);
+  return stickerDocument;
 }
 
 async function archiveStaleDialogs(client) {
@@ -1106,12 +1145,11 @@ async function persistStickerSelection(client, document, stickerSets, envPath) {
   const setId = stickerAttr.stickerset.id;
   const setHash = stickerAttr.stickerset.accessHash;
 
-  // find set index
-  const setIndex = stickerSets.sets.findIndex((s) => s.id === setId && s.accessHash === setHash);
-  if (setIndex === -1) return;
+  const setIndex = stickerSets.sets.findIndex(
+    (s) => sameTelegramId(s.id, setId) && sameTelegramId(s.accessHash, setHash),
+  );
 
-  // find doc index inside set
-  let docIndex = 0;
+  let docIndex = -1;
   try {
     const stickerSet = await client.invoke(
       new Api.messages.GetStickerSet({
@@ -1123,19 +1161,26 @@ async function persistStickerSelection(client, document, stickerSets, envPath) {
       }),
     );
     if (stickerSet?.documents?.length) {
-      const foundIndex = stickerSet.documents.findIndex((d) => d.id === document.id);
+      const foundIndex = stickerSet.documents.findIndex((d) => sameTelegramId(d.id, document.id));
       if (foundIndex >= 0) {
         docIndex = foundIndex;
       }
     }
   } catch (error) {
-    // ignore, fallback docIndex=0
+    // ignore; stable document id is enough for future loads.
   }
 
-  await upsertEnvValue(envPath, "STICKER_SET_INDEX", setIndex);
-  await upsertEnvValue(envPath, "STICKER_DOC_INDEX", docIndex);
+  if (setIndex >= 0) {
+    await upsertEnvValue(envPath, "STICKER_SET_INDEX", setIndex);
+  }
+  if (docIndex >= 0) {
+    await upsertEnvValue(envPath, "STICKER_DOC_INDEX", docIndex);
+  }
+  await upsertEnvValue(envPath, "STICKER_SET_ID", setId);
+  await upsertEnvValue(envPath, "STICKER_SET_ACCESS_HASH", setHash);
+  await upsertEnvValue(envPath, "STICKER_DOC_ID", document.id);
   console.log(
-    `Стикер выбран и сохранен в ${formatEnvPath(envPath)} (STICKER_SET_INDEX=${setIndex}, STICKER_DOC_INDEX=${docIndex}).`,
+    `Стикер выбран и сохранен в ${formatEnvPath(envPath)} (STICKER_DOC_ID=${document.id}).`,
   );
 }
 
@@ -1211,7 +1256,6 @@ async function main() {
     dailyStats[TODAY_KEY] = { sent: 0, blocks: [] };
   }
   let sessionSent = 0;
-  let peerFloodNoLimitStreak = 0;
 
   // Override message files via env
   const messageFilesOverride = String(process.env.MESSAGE_FILES ?? "")
@@ -1364,7 +1408,6 @@ async function main() {
         console.log(
           `Сессия отправлено: ${sessionSent}. Сегодня отправлено: ${dailyStats[TODAY_KEY].sent}.`,
         );
-        peerFloodNoLimitStreak = 0;
         peerFloodRetriesByUser.delete(dedupeKey);
       } catch (error) {
         const message = getErrorMessage(error);
@@ -1395,27 +1438,18 @@ async function main() {
             if (unblockResult.hadRestriction) {
               console.log("✅ Ограничение снято. Повторяю отправку текущему пользователю.");
               await appendLog(user, "PEER_FLOOD resolved after SpamBot");
-              peerFloodNoLimitStreak = 0;
             } else {
-              peerFloodNoLimitStreak += 1;
-              console.log(
-                `⚠️ SpamBot не показывает блок. Подозрение на дневной лимит (серия ${peerFloodNoLimitStreak}).`,
-              );
-              if (peerFloodNoLimitStreak >= 2) {
-                console.log("⏸ Повторное срабатывание. Останавливаю рассылку до следующего запуска.");
-                stopAfterCurrentUser = true;
-                shouldArchiveAfterStop = true;
-                dailyStats[TODAY_KEY].blocks.push({
-                  user,
-                  rowIndex,
-                  timestamp: nowStamp(),
-                  type: "peer_flood_hard",
-                });
-                await saveDailyStats(PATHS.DAILY_STATS_JSON, dailyStats);
-                await appendLog(user, "Stopped: PEER_FLOOD hard limit, stop for today");
-              } else {
-                await appendLog(user, "PEER_FLOOD suspected hard limit, will continue until repeat");
-              }
+              console.log("⚠️ SpamBot не показывает блок. Считаю это дневным лимитом и останавливаю рассылку.");
+              stopAfterCurrentUser = true;
+              shouldArchiveAfterStop = true;
+              dailyStats[TODAY_KEY].blocks.push({
+                user,
+                rowIndex,
+                timestamp: nowStamp(),
+                type: "peer_flood_hard",
+              });
+              await saveDailyStats(PATHS.DAILY_STATS_JSON, dailyStats);
+              await appendLog(user, "Stopped: PEER_FLOOD hard limit, stop for today");
             }
 
             if (!stopAfterCurrentUser) {

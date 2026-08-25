@@ -6,9 +6,7 @@ const storageBase =
   storageMode === "per_profile" ? path.resolve("storage", profile) : path.resolve("storage");
 const reportPath = process.env.REPORT_FILE
   ? path.resolve(process.env.REPORT_FILE)
-  : storageMode === "per_profile"
-    ? path.resolve(storageBase, "report.csv")
-    : path.resolve("report.csv");
+  : path.resolve(storageBase, "report.csv");
 
 export const PATHS = {
   LISTS_DIR: path.resolve("lists"),
@@ -33,6 +31,9 @@ export const MESSAGE_CONFIG = {
 
 export const STICKER_CONFIG = {
   ENABLED: true,
+  SET_ID: process.env.STICKER_SET_ID ?? "",
+  SET_ACCESS_HASH: process.env.STICKER_SET_ACCESS_HASH ?? "",
+  DOC_ID: process.env.STICKER_DOC_ID ?? "",
   SET_INDEX: process.env.STICKER_SET_INDEX ?? "",
   STICKER_INDEX: process.env.STICKER_DOC_INDEX ?? "",
   INTERACTIVE_PROMPT: true,
