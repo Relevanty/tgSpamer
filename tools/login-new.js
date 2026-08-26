@@ -2,6 +2,7 @@ import { spawn } from "node:child_process";
 import fs from "node:fs/promises";
 import { existsSync } from "node:fs";
 import path from "node:path";
+import readline from "node:readline/promises";
 
 const DEFAULT_THIRD_MESSAGE_FILE = "we.txt";
 const DEFAULT_THIRD_MESSAGE_PHOTO = "images/sticker1.png";
@@ -89,6 +90,80 @@ function upsertEnvValue(content, key, value) {
   return nextContent;
 }
 
+function activateEnvValue(content, key, value) {
+  const eol = content.includes("\r\n") ? "\r\n" : "\n";
+  const lines = content ? content.split(/\r?\n/) : [];
+  const serialized = `${key}=${serializeEnvValue(value)}`;
+  const keyPattern = new RegExp(
+    `^\\s*#?\\s*(?:export\\s+)?${key.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\s*=`,
+  );
+  const updatedLines = [];
+  let found = false;
+
+  for (const line of lines) {
+    if (keyPattern.test(line)) {
+      if (!found) {
+        updatedLines.push(serialized);
+        found = true;
+      }
+      continue;
+    }
+
+    updatedLines.push(line);
+  }
+
+  if (!found) {
+    if (updatedLines.length > 0 && updatedLines[updatedLines.length - 1] !== "") {
+      updatedLines.push("");
+    }
+    updatedLines.push(serialized);
+  }
+
+  let nextContent = updatedLines.join(eol);
+  if (!nextContent.endsWith(eol)) {
+    nextContent += eol;
+  }
+  return nextContent;
+}
+
+function applyTwgProxyConfig(content) {
+  let nextContent = activateEnvValue(content, "SOCKS_PROXY", "127.0.0.1:1080");
+  nextContent = activateEnvValue(nextContent, "SOCKS_TYPE", "5");
+  nextContent = activateEnvValue(nextContent, "TELEGRAM_TRANSPORT", "obfuscated");
+  return nextContent;
+}
+
+async function askUseTwgProxy() {
+  if (!process.stdin.isTTY || !process.stdout.isTTY) {
+    return false;
+  }
+
+  const rl = readline.createInterface({
+    input: process.stdin,
+    output: process.stdout,
+  });
+
+  try {
+    while (true) {
+      const answer = (await rl.question("Нужно подключение TWG proxy? (да/нет, по умолчанию нет): "))
+        .trim()
+        .toLowerCase();
+
+      if (!answer || answer === "n" || answer === "no" || answer === "н" || answer === "нет") {
+        return false;
+      }
+
+      if (answer === "y" || answer === "yes" || answer === "д" || answer === "да") {
+        return true;
+      }
+
+      console.log("Введите да или нет.");
+    }
+  } finally {
+    rl.close();
+  }
+}
+
 function parseEnvValue(content, key) {
   for (const line of content.split(/\r?\n/)) {
     const match = line.match(/^\s*(?:export\s+)?([A-Za-z_][A-Za-z0-9_]*)\s*=\s*(.*)\s*$/);
@@ -163,13 +238,16 @@ async function findTemplatePath() {
   throw new Error("Не найден шаблон templates/example.env.");
 }
 
-async function createTempEnv(tempEnvPath) {
+async function createTempEnv(tempEnvPath, useTwgProxy) {
   const templatePath = await findTemplatePath();
   let content = await fs.readFile(templatePath, "utf8");
   content = upsertEnvValue(content, "SESSION_STRING", "");
   content = upsertEnvValue(content, "PROFILE", "tmp-login");
   content = upsertEnvValue(content, "THIRD_MESSAGE_TEXT_FILE", DEFAULT_THIRD_MESSAGE_FILE);
   content = upsertEnvValue(content, "THIRD_MESSAGE_PHOTO_PATH", DEFAULT_THIRD_MESSAGE_PHOTO);
+  if (useTwgProxy) {
+    content = applyTwgProxyConfig(content);
+  }
 
   await fs.writeFile(tempEnvPath, content, "utf8");
   console.log(`Создан временный конфиг ${path.basename(tempEnvPath)} из ${path.basename(templatePath)}.`);
@@ -256,15 +334,41 @@ async function createProfileBatchFiles(profileName, envFileName) {
 
 async function safeUnlink(filePath) {
   if (!filePath) {
-    return;
+    return false;
   }
 
   try {
     await fs.unlink(filePath);
+    return true;
   } catch (error) {
     if (error?.code !== "ENOENT") {
       console.log(`Не удалось удалить ${path.basename(filePath)}: ${error.message}`);
     }
+    return false;
+  }
+}
+
+async function cleanupOldTempLoginFiles() {
+  const entries = await fs.readdir(process.cwd(), { withFileTypes: true });
+  let deletedCount = 0;
+
+  for (const entry of entries) {
+    if (!entry.isFile() || !entry.name.startsWith(".env.tmp-login-")) {
+      continue;
+    }
+
+    const filePath = path.resolve(entry.name);
+    if (filePath === activeTempEnvPath || filePath === activeLoginInfoPath) {
+      continue;
+    }
+
+    if (await safeUnlink(filePath)) {
+      deletedCount += 1;
+    }
+  }
+
+  if (deletedCount > 0) {
+    console.log(`Удалены старые временные файлы входа: ${deletedCount}.`);
   }
 }
 
@@ -287,6 +391,8 @@ process.once("SIGTERM", () => {
 });
 
 async function main() {
+  await cleanupOldTempLoginFiles();
+
   const suffix = `${process.pid}-${Date.now()}`;
   const tempEnvPath = path.resolve(`.env.tmp-login-${suffix}`);
   const loginInfoPath = path.resolve(`.env.tmp-login-info-${suffix}.json`);
@@ -295,7 +401,8 @@ async function main() {
   let success = false;
 
   try {
-    await createTempEnv(tempEnvPath);
+    const useTwgProxy = await askUseTwgProxy();
+    await createTempEnv(tempEnvPath, useTwgProxy);
     console.log("Отсканируйте QR-код. Финальный .env будет создан только после успешного входа.");
     console.log("");
 
